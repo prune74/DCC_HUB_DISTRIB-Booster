@@ -1,190 +1,150 @@
-# 🚂 DCC_HUB_DISTRIB-Booster - Hub de distribution DCC — CFC (2 × 8 districts)
+# 🚂 DCC\_HUB\_DISTRIB-Booster — Chemins de Fer du Chablais (CFC)
 
-Carte ESP32 intermédiaire entre **une sortie EXT de la LaBox** et **8 convertisseurs DCC\_CAN\_RTM-Booster** (un par district). Chaque district dispose d'une sortie DCC 3,3 V **coupable individuellement** et d'une entrée « intensité » TOR (ligne d'injection du convertisseur). Les convertisseurs et boosters existants restent **inchangés**.
+Module **hub de distribution DCC** : une entrée venant de la sortie **EXT1/EXT2 (0–3,3 V)** de la centrale LaBox / CommandStation-EX (via un XOR SN74LVC1G86 sur GPIO 27), et **8 sorties DCC indépendantes** — une par district (gare cachée, zone visible…), chacune **coupable individuellement**. Le retour d'intensité de chaque district est un signal **tout-ou-rien** : la ligne d'injection DAC du convertisseur DCC\_CAN\_RMT-Booster du district, lue via un **MCP23017** sur interruption. Le hub écoute et émet sur le **bus CAN (TWAI natif, TX GPIO 5 / RX GPIO 4, 500 kbit/s)**.
 
-**Deux hubs identiques** — l'un sur EXT1, l'autre sur EXT2 — donnent **16 districts au total**, chacun avec son repli global indépendant :
+**Deux hubs identiques** — l'un sur EXT1, l'autre sur EXT2 — donnent **16 districts**, avec le même firmware : seule `Config.h` change (`HUB_INSTANCE` 0 ou 1, noms **ID\_H\_01 / ID\_H\_02**).
 
+Basé sur la bibliothèque prune74/CanUniversal. Projets de la même famille : prune74/DCC\_CAN-Booster (version ISR), prune74/DCC\_CAN\_RMT-Booster (convertisseur DCC → CAN).
 
-| Hub   | Sortie LaBox | Injection DAC →         | Districts | Nom ID\_X\_nn                    |
-| ----- | ------------ | ----------------------- | --------- | -------------------------------- |
-| Hub A | EXT1         | GPIO35 (intensité EXT1) | 1…8       | **ID\_H\_01** (`HUB_INSTANCE` 0) |
-| Hub B | EXT2         | GPIO39 (intensité EXT2) | 9…16      | **ID\_H\_02** (`HUB_INSTANCE` 1) |
+## Pourquoi le GPIO Matrix ?
 
-
-### Nomenclature ID\_X\_nn — les hubs entrent dans la famille
-
-Extension du tableau du DCC\_CAN\_RTM-Booster : **TYPE=5 → lettre `H`**, nommage `ID_H_01`…`ID_H_02` reconstruit côté convertisseur (et supervision PC) comme pour les boosters. À réserver dans le firmware convertisseur :
+Le DCC entrant est recopié **matériellement** vers les 8 broches de sortie, sans décodage ni re-synthèse :
 
 
-| TYPE  | Lettre  | Nom                     | Cartes                               |
-| ----- | ------- | ----------------------- | ------------------------------------ |
-| 0     | `C`     | `ID_C`                  | Convertisseur DCC → CAN (unique)     |
-| 1     | `B`     | `ID_B_01`…`ID_B_nn`     | Boosters de puissance                |
-| 2     | `S`     | `ID_S_nn`               | Aiguillages / accessoires (réservé)  |
-| 3     | `D`     | `ID_D_nn`               | Détection d'occupation (réservé)     |
-| **5** | **`H`** | **`ID_H_01`…`ID_H_nn`** | **Hubs de distribution (EXT1/EXT2)** |
+|                       | Distribution par décodage/re-synthèse | Ce projet (GPIO Matrix)                      |
+| --------------------- | ------------------------------------- | -------------------------------------------- |
+| Copie du signal       | logicielle (reconstruction paquets)   | **matérielle** (matrice de broches)          |
+| Fidélité au signal    | cutout recréé, timing nominal         | **fronts d'origine, cutout conservé**        |
+| Charge CPU            | décodage + 8 générations              | **aucune** (routage par le matériel)         |
+| Latence               | quelques ms                           | **nulle**                                    |
+| Coupure d'un district | —                                     | broche déconnectée de la matrice, forcée à 0 |
 
 
-⚠️ Les types 2/3 étant réservés à des cartes futures, le type 4 reste libre — on saute directement à 5 pour les hubs afin de garder 4 disponible. Chaque type garde son espace de 254 numéros.
+Le signal DCC de chaque district reste **exactement celui de la LaBox**, y compris les cutouts (RailCom de bout en bout). Le CPU ne s'occupe que du lent : lecture des injections TOR, machine à états des districts, CAN, LED.
 
-Seule différence entre les deux cartes : la config (`Config.h`) — même firmware, même PCB.
-
-## Principe : DCC direct sur GPIO (8 districts)
-
-Avec 8 districts, l'ESP32 a assez de broches : le **GPIO Matrix** recopie le signal DCC d'entrée vers les **8 broches DCC out**, une par district (fronts d'origine, zéro charge CPU). Couper un district = déconnecter sa broche de la matrice et la forcer à 0. Les injections TOR des convertisseurs arrivent sur un **MCP23017** (I2C, 8 entrées, interruption). Pas de 74HC126, pas de 2ᵉ MCP23017.
-
-## Architecture (par hub)
-
-```mermaid
-flowchart TB
-    LB["LaBox EXT1 (ou EXT2)"] -- "DCC 3,3 V" --> XOR["XOR SN74LVC1G86"] -- "GPIO 27" --> HUB
-    HUB -- "DAC GPIO 25 via 4,7–10 kΩ" --> LBI["broche intensité EXT (GPIO35/39)"]
-    subgraph HUB["ESP32 Hub"]
-        M["GPIO Matrix : copie DCC<br/>vers 8 broches coupables"]
-    end
-    HUB -- "DCC out 1" --> C1["Convertisseur 1 — gare cachée"]
-    HUB -- "DCC out 8" --> C8["Convertisseur 8"]
-    C1 -. "injection = défaut" .-> MCP
-    C8 -. "injection" .-> MCP
-    MCP["MCP23017 @ 0x20<br/>8 entrées TOR (GPA0–7)"] -- "I2C + INT" --> HUB
-    HUB <--> |"CAN 500 kbit/s<br/>(bus commun aux 2 hubs)"| BUS["Bus CAN"]
-```
-
-## Brochage ESP32 (commun aux 2 hubs)
+## Architecture
 
 
-| Fonction              | GPIO     | Rôle / câblage                                                    |
-| --------------------- | -------- | ----------------------------------------------------------------- |
-| DCC in (hub)          | 27       | EXT → XOR SN74LVC1G86 → GPIO27, masse commune LaBox ↔ hub         |
-| DCC out 1             | 13       | vers XOR du convertisseur 1                                       |
-| DCC out 2             | 14       | vers XOR du convertisseur 2                                       |
-| DCC out 3             | 15       | vers XOR du convertisseur 3                                       |
-| DCC out 4             | 18       | vers XOR du convertisseur 4                                       |
-| DCC out 5             | 19       | vers XOR du convertisseur 5                                       |
-| DCC out 6             | 16       | vers XOR du convertisseur 6                                       |
-| DCC out 7             | 17       | vers XOR du convertisseur 7                                       |
-| DCC out 8             | 32       | vers XOR du convertisseur 8                                       |
-| Injection hub → LaBox | 25 (DAC) | résistance 4,7–10 kΩ → GPIO35 (hub A) ou GPIO39 (hub B), ≈ 3,04 V |
-| I2C SDA / SCL         | 21 / 22  | MCP23017 @ 0x20, 400 kHz                                          |
-| INT MCP23017          | 34       | pull-up 10 kΩ externe, active bas                                 |
-| CAN TX / RX           | 5 / 4    | TWAI natif 500 kbit/s, transceiver TJA1050/SN65HVD230             |
-| LED WS2812            | 26       | 9 LED (1 générale + 8 districts), 100 nF près du strip            |
+| Élément                       | Rôle                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| GPIO Matrix (matériel)        | recopie le signal d'entrée (GPIO 27) vers les 8 broches DCC out            |
+| `DistrictRouter`              | route / coupe chaque broche de district (fronts d'origine, coupure = 0)    |
+| MCP23017 @ 0x20 (port A)      | 8 entrées TOR : injections des convertisseurs, interruption sur changement |
+| `DistrictManager`             | machine à états des 8 districts (coupe / retry / verrouillage)             |
+| `GlobalInject` (DAC GPIO 25)  | repli global : injection vers la broche intensité de l'EXT de la LaBox     |
+| `CanHub` (TWAI, TX 5 / RX 4)  | télémétrie 0x102 du hub (TYPE=5, ID=HUB\_INSTANCE), écoute des ID\_B\_xx   |
+| `StatusLed` (WS2812, GPIO 26) | 9 LED : 1 générale + 1 par district                                        |
 
-
-GPIO 33 et les entrées 35/36/39 restent libres (l'entrée 35/39 est utilisée côté LaBox, pas côté hub).
-
-## Entrées intensité — MCP23017
-
-- **GPA0…GPA7** = injections des districts 1…8 du hub ;
-- ligne d'injection du convertisseur (son GPIO25) → résistance série 4,7–10 kΩ → GPIO du MCP23017 ;
-- niveaux : `HIGH` ≈ 3,04 V = défaut confirmé, `LOW` = normal — lisible en TOR, aucun ADC nécessaire ;
-- lecture **par interruption** (broche INT → GPIO34), confirmation anti-rebond ≥ 20 ms ;
-- pull-ups internes du MCP : ligne lue `LOW` si un convertisseur est absent (pas de faux défaut).
-
-## Logique à niveaux
-
-
-| Niveau | Qui agit | Effet |
-| --- | --- | --- |
-| 1 — local | chaque booster (via CAN) | coupe sa propre zone, trafic continu ailleurs |
-| 1.5 — **hub** | hub de distribution | injection du district n détectée → **coupe DCC out n** (broche déconnectée de la matrice, forcée à 0). Le convertisseur n perd son DCC &gt; 500 ms → failsafe → relâche son injection. **Aucun autre district touché.** |
-| 2 — retry | hub | réactivation du district après délai (5 s puis 10 s), 2 essais |
-| 3 — repli global | hub | si le défaut revient : district verrouillé + **injection DAC du hub vers la broche intensité de SON EXT** → la LaBox coupe uniquement ce segment (EXT1 ou EXT2), l'autre hub et ses 8 districts continuent normalement |
-
-
-Avec deux hubs, le repli global ne coupe plus que la **moitié** du réseau — c'est le double avantage d'EXT1 + EXT2 par rapport à un hub de 16.
-
-## Machine à états d'un district
-
-```mermaid
-stateDiagram-v2
-    [*] --> ACTIF
-    ACTIF --> COUPE : injection détectée (>20 ms)
-    COUPE --> ATTENTE_RETRY : injection relâchée (convertisseur en failsafe)
-    ATTENTE_RETRY --> ACTIF : essai 1 ou 2
-    ATTENTE_RETRY --> VERROUILLE : 2 essais épuisés
-    VERROUILLE --> ACTIF : acquittement CAN ou série
-    VERROUILLE --> INJECTION_GLOBALE : défaut persistant
-    INJECTION_GLOBALE --> VERROUILLE : tout est redevenu OK
-```
-
-## Séquence de coupure sélective
-
-```mermaid
-sequenceDiagram
-    participant B as Booster RTM (district n)
-    participant C as Convertisseur n
-    participant H as Hub de distribution
-    participant L as LaBox
-    B->>C: FAULT ×3 (télémétrie 0x102)
-    C->>C: confirme le défaut
-    C-->>H: injection ~3,04 V sur la ligne du district n
-    H->>H: coupe DCC out n (GPIO Matrix)
-    Note over B,L: les autres districts (des 2 hubs) continuent normalement
-    C->>C: DCC perdu > 500 ms → failsafe → relâche l'injection
-    H->>C: réactive DCC out n (retry)
-    alt défaut persistant
-        H-->>L: injection DAC du hub → coupure du segment EXT concerné
-    else district sain
-        C->>H: injection LOW, télémétrie OK
-    end
-```
-
-## Câblage des convertisseurs (inchangé)
-
-Chaque convertisseur se branche **comme sur EXT1/EXT2** :
-
-
-| Signal convertisseur             | Destination               | Remarque                                                 |
-| -------------------------------- | ------------------------- | -------------------------------------------------------- |
-| entrée DCC (via son XOR, GPIO27) | DCC out n du hub          | même format que EXT LaBox                                |
-| injection DAC (GPIO25)           | entrée TOR du MCP23017    | résistance 4,7–10 kΩ, la ligne ne va **plus** à la LaBox |
-| CAN TX/RX                        | bus CAN commun aux 2 hubs | supervision 0x102 côté hubs                              |
-| masse                            | masse commune hub/LaBox   | obligatoire, déjà imposée par le CAN                     |
-
-
-⚠️ Chaque convertisseur appartient à un hub précis : les 8 premiers sur le hub A (EXT1), les 8 suivants sur le hub B (EXT2). La nomenclature ID\_B\_xx reste globale sur le bus CAN (B\_01 à B\_16).
-
-## Nomenclature (BOM) — par hub (×2)
-
-
-| Élément                              | Qté                          |
-| ------------------------------------ | ---------------------------- |
-| ESP32 DevKitC (WROOM-32)             | 1                            |
-| XOR SN74LVC1G86                      | 1                            |
-| MCP23017 (DIP/SOIC)                  | 1                            |
-| Résistance 4,7–10 kΩ                 | 9 (8 injections + 1 DAC)     |
-| Pull-up 10 kΩ (INT)                  | 1                            |
-| Transceiver CAN (TJA1050/SN65HVD230) | 1                            |
-| Strip WS2812                         | 9 LED (1 + 8)                |
-| Résistances 120 Ω                    | 2 par bus CAN (terminaisons) |
-| Borniers 3 pts (DCC, GND, inj.)      | 8                            |
-
-
-## Commandes série du hub
 
 ```
-districts          état des 8 districts (état, dernier défaut, retries)
-districts json     idem JSON pour supervision PC
+LaBox (CommandStation-EX)                 ESP32 hub                        Bus CAN
+┌─────────────────────┐   EXT1/EXT2    ┌────────────────────────────┐
+│  Sortie booster     │  0–3.3 V  ──►  │ XOR SN74LVC1G86 → GPIO 27  │
+│  DCC + cutout       │                │        │                   │
+│                     │                │   GPIO Matrix (matériel)   │
+└─────────────────────┘                │   8 broches coupables ──►──┼──►  vers les 8
+                                       │                            │     convertisseurs
+┌─────────────────────┐   injection    │ MCP23017 ← 8 lignes TOR ◄──┼──◄  (DAC GPIO25
+│  Convertisseurs     │  ◄──────────►  │ INT → GPIO 34 (I2C 21/22)  │     des cartes)
+└─────────────────────┘                │ TWAI : TX=5, RX=4          │ ──► 500 kbit/s
+                                       │ DAC GPIO 25 ──► LaBox EXT  │
+                                       └────────────────────────────┘
+```
+
+## Câblage
+
+
+| Signal | Origine | ESP32 | Remarques |
+| --- | --- | --- | --- |
+| DCC logique (hub) | LaBox EXT1/EXT2 via XOR SN74LVC1G86 | GPIO 27 | **Masse commune** LaBox ↔ hub obligatoire |
+| DCC out 1…8 | vers XOR des convertisseurs 1…8 | 13, 14, 15, 18, 19, 16, 17, 32 | même format que EXT LaBox |
+| Injections TOR 1…8 | DAC GPIO 25 des convertisseurs, via 4,7–10 kΩ | MCP23017 @ 0x20 (GPA0–7) | \~3,04 V = défaut confirmé, lisible en TOR |
+| Injection hub → LaBox | DAC natif, via résistance 4,7–10 kΩ | GPIO 25 | broche intensité EXT (GPIO 35 = EXT1, GPIO 39 = EXT2). Jamais &gt; 3,3 V |
+| INT MCP23017 | interruption sur changement | GPIO 34 | pull-up 10 kΩ externe |
+| CAN TX / RX | TWAI natif | GPIO 5 / 4 | transceiver TJA1050/SN65HVD230, 2 × 120 Ω en bout de bus |
+| LED d'état WS2812 ×9 | strip | GPIO 26 | LED 0 = générale, LED 1…8 = districts, 100 nF près du strip |
+
+
+Le fil DCC de chaque district est torsadé avec son GND ; la masse est commune LaBox ↔ hubs ↔ convertisseurs (déjà imposée par le CAN).
+
+## Principe de la coupure sélective
+
+Les convertisseurs DCC\_CAN\_RMT-Booster restent **inchangés** : ils injectent comme aujourd'hui sur leur ligne DAC en cas de défaut confirmé. La nouveauté : cette ligne ne va plus à la LaBox, elle arrive sur le hub — qui agit **par district** :
+
+1. **Niveau 1 (local, normal)** : chaque booster coupe sa propre zone en cas de défaut — le trafic continue ailleurs.
+2. **Niveau 1.5 (hub, coupure sélective)** : l'injection du district n est détectée (anti-rebond ≥ 20 ms) → le hub **coupe DCC out n** (broche déconnectée de la matrice, forcée à 0). Le convertisseur n voit son DCC disparaître &gt; 500 ms → failsafe → il relâche son injection. **Les autres districts, y compris ceux de l'autre hub, continuent normalement.**
+3. **Niveau 2 (retry)** : réactivation du district après 5 s puis 10 s, 2 essais.
+4. **Niveau 3 (repli global)** : district verrouillé + défaut persistant → le hub injecte via son **DAC (GPIO 25)** une tension \~3,04 V sur la broche intensité de **son** EXT (seuil LaBox : 2500 mA ÷ 0,80 = 2,52 V). LaBox détecte une « surintensité » et **coupe le DCC du segment EXT concerné** — l'autre hub et ses 8 districts ne sont pas touchés. L'injection est relâchée quand tout revient OK : LaBox rétablit le DCC automatiquement.
+
+Le cutout est transporté intact par le GPIO Matrix : le RailCom éventuel de la LaBox traverse le hub sans aucune dégradation.
+
+## Protocole CAN (IDs 11 bits)
+
+
+| ID | Contenu (côté hub) |
+| --- | --- |
+| `0x102` | **Télémétrie du hub** : `{ ID, TYPE, mA/10, mV/100, état }` (DLC 5) — TYPE=5 (`H`), ID = `HUB_INSTANCE` (0 → **ID\_H\_01**, 1 → **ID\_H\_02**) ; le hub ne mesure ni courant ni tension (mA=0, mV=0), seul son **état** est significatif : 0=OK, 1=FAULT (districts verrouillés), 3=OFF (districts coupés) |
+| `0x102` | **Écoute** des télémétries des autres modules du bus (convertisseur ID\_C, boosters ID\_B\_xx) pour le suivi nominatif `HubWatch` |
+
+
+Les interactions précises entre les cartes (rôles, timings partagés, réservations de protocole côté convertisseur, configuration LaBox) sont documentées séparèrement dans le document de **liaison entre cartes**.
+
+## LED d'état WS2812 ×9 (GPIO 26)
+
+LED 0 (générale) puis 1 LED par district, tout visible simultanément :
+
+
+| LED                      | Couleur                        | État                                         |
+| ------------------------ | ------------------------------ | -------------------------------------------- |
+| **LED 0 — général**      | Vert battement de cœur (1,5 s) | Hub opérationnel                             |
+|                          | Rouge clignotant lent (0,5 Hz) | Injection globale active (niveau 3)          |
+| **LED 1…8 — district n** | Vert discret                   | District ACTIF                               |
+|                          | Rouge                          | Injection présente non encore confirmée      |
+|                          | Orange                         | District coupé ou en retry                   |
+|                          | Rouge clignotant (1 Hz)        | District verrouillé (2 essais épuisés)       |
+|                          | Magenta                        | Injection globale déclenchée par ce district |
+|                          | Bleu                           | Coupure manuelle (`cut N`)                   |
+
+
+Gradation via `WS2812_BRIGHTNESS` dans `Config.h`. Mêmes conventions visuelles que DCC\_CAN\_RMT-Booster.
+
+## Failsafe
+
+- Perte du signal DCC en entrée → le hub le détecte et télémétrie l'état ; les sorties suivent l'entrée (silence en entrée = silence en sortie).
+- Convertisseur absent d'un district : pull-ups internes du MCP23017 → injection lue `LOW`, aucun faux défaut.
+- Injection maintenue à la coupure du DCC du district : le convertisseur n passe en failsafe et relâche après 500 ms (comportement DCC\_CAN\_RMT-Booster inchangé).
+- Redémarrage du hub : tous les districts réactivés, retries remis à zéro.
+
+## Compilation (VSCode + PlatformIO)
+
+```
+pio run
+pio run -t upload
+pio device monitor
+```
+
+`platformio.ini` épingle `espressif32@6.9.0` (arduino-esp32 2.0.x). Configuration matérielle : `src/Pins.h` (broches), `src/Config.h` (`HUB_INSTANCE`, seuils, délais, IDs CAN, LED).
+
+Flasher le hub A avec `HUB_INSTANCE 0`, le hub B avec `HUB_INSTANCE 1` — seule différence entre les deux cartes.
+
+## Commandes série (115200 bauds)
+
+```
+districts          état des 8 districts du hub
+districts json     idem JSON, pour journalisation/supervision PC
+hub                identité (A/B, EXT1/EXT2, ID_H_xx, version)
 cut N / on N       coupure / réactivation manuelle d'un district
-inject on|off      test de l'injection DAC vers la LaBox
-hub                identité du hub (EXT1/EXT2, ID CAN)
+inject on|off      test manuel de l'injection DAC → LaBox (voltmètre sur GPIO 25)
 reset              redémarrage ESP32
 ```
 
-## Structure du firmware (miroir de DCC\_CAN\_RMT-Booster)
+## Limites connues
 
-```
-src/
-├── Pins.h            broches et adresses I2C
-├── Config.h          seuils, délais, IDs CAN, identité du hub (A ou B)
-├── DistrictRouter.h/.cpp      copie GPIO Matrix + coupure directe par broche
-├── InjectionInput.h/.cpp     MCP23017 : lecture des 8 injections (INT)
-├── DistrictManager.h/.cpp     machine à états des 8 districts
-├── GlobalInject.h/.cpp        DAC → broche intensité de l'EXT du hub
-├── HubCanConfig.h             Provider CanUniversal (TWAI interne, TX=5/RX=4)
-├── CanHub.h/.cpp              télémétrie 0x102 + écoute du bus (ID_B_xx)
-├── StatusLed.h/.cpp           WS2812 : 1 LED générale + 8 districts
-├── Cli.h/.cpp                 commandes série
-└── main.cpp                   setup + boucle
-```
+- 8 districts par hub (broches ESP32) — 16 au total avec les deux hubs EXT1/EXT2.
+- Le hub ne mesure ni courant ni tension : la télémétrie 0x102 envoie `mA=0, mV=0` — seuls ID/TYPE/état sont significatifs.
+- La lecture d'intensité réelle de la sortie EXT de LaBox devient inutilisable (elle voit l'injection du hub en niveau 3) — sans importance, cette sortie n'alimente que le hub.
+- Les GPIO 12 (MTDI), 0, 2 sont évités pour ne pas perturber le boot.
+
+## Auteur
+
+Bruno Rivera (prune74) — Projet Chemins de Fer du Chablais (CFC)
