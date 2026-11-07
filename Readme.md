@@ -1,4 +1,4 @@
-# 🚂 Hub de distribution DCC — CFC (2 × 8 districts)
+# 🚂 DCC_HUB_DISTRIB-Booster - Hub de distribution DCC — CFC (2 × 8 districts)
 
 Carte ESP32 intermédiaire entre **une sortie EXT de la LaBox** et **8 convertisseurs DCC\_CAN\_RTM-Booster** (un par district). Chaque district dispose d'une sortie DCC 3,3 V **coupable individuellement** et d'une entrée « intensité » TOR (ligne d'injection du convertisseur). Les convertisseurs et boosters existants restent **inchangés**.
 

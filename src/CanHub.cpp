@@ -3,6 +3,7 @@
 #include "HubCanConfig.h"
 #include "Config.h"
 #include "DistrictManager.h"
+#include "HubWatch.h"
 #include <CanUniversal.h>
 
 // 0x102 : { ID, TYPE, mA/10, mV/100, état } — le hub ne mesure ni courant ni
@@ -11,7 +12,8 @@
 
 static HubCanConfig canConfig;
 
-void canInit() {
+void canInit()
+{
     // begin() est tolérante : un bus en erreur reste accessible (invalide),
     // sans jamais faire crasher l'application.
     CanInit::begin(canConfig);
@@ -19,38 +21,46 @@ void canInit() {
         Serial.println("[CAN] bus invalide — vérifiez le câblage !");
 }
 
-static void canRxTask(void*) {
+static void canRxTask(void *)
+{
     CanMsg rx;
-    for (;;) {
-        if (CanBus::bus(0).receive(rx)) {
-            if (rx.id == CAN_TELEMETRY_ID && rx.dlc >= 5) {
-                // uint8_t id = rx.data[0], type = rx.data[1], etat = rx.data[4];
-                // TODO : suivi BoosterWatch-style des ID_B_xx pour croiser
-                // injections TOR et états CAN (diagnostic, journalisation).
+    for (;;)
+    {
+        if (CanBus::bus(0).receive(rx))
+        {
+            if (rx.id == CAN_TELEMETRY_ID && rx.dlc >= 5)
+            {
+                watchFeed(rx); // suivi nominatif ID_X_nn (HubWatch)
             }
         }
         vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
-static void canTxTask(void*) {
-    for (;;) {
+static void canTxTask(void *)
+{
+    for (;;)
+    {
         uint8_t off = 0, locked = 0;
-        for (uint8_t i = 0; i < HUB_NB_DISTRICTS; i++) {
+        for (uint8_t i = 0; i < HUB_NB_DISTRICTS; i++)
+        {
             DistrictState s = dmState(i);
-            if (s == DS_COUPE || s == DS_COUPE_MANUEL || s == DS_ATTENTE_RETRY) off++;
-            if (s == DS_VERROUILLE || s == DS_INJECTION_GLOBALE) locked++;
+            if (s == DS_COUPE || s == DS_COUPE_MANUEL || s == DS_ATTENTE_RETRY)
+                off++;
+            if (s == DS_VERROUILLE || s == DS_INJECTION_GLOBALE)
+                locked++;
         }
         CanMsg m((uint16_t)CAN_TELEMETRY_ID,
-                 { HUB_CAN_ID, HUB_CAN_TYPE,
-                   (uint8_t)0, (uint8_t)0,                       // mA/10, mV/100
-                   (uint8_t)(locked ? 1 : (off ? 3 : 0)) });     // 1=FAULT, 3=OFF, 0=OK
+                 {HUB_CAN_ID, HUB_CAN_TYPE,
+                  (uint8_t)0, (uint8_t)0,                  // mA/10, mV/100
+                  (uint8_t)(locked ? 1 : (off ? 3 : 0))}); // 1=FAULT, 3=OFF, 0=OK
         CanBus::bus(0).send(m);
         vTaskDelay(pdMS_TO_TICKS(TELEMETRY_PERIOD_MS));
     }
 }
 
-void canStartTasks() {
+void canStartTasks()
+{
     xTaskCreatePinnedToCore(canRxTask, "canrx", 4096, nullptr, 2, nullptr, 0);
     xTaskCreatePinnedToCore(canTxTask, "cantx", 4096, nullptr, 2, nullptr, 0);
 }

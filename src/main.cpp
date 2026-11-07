@@ -8,6 +8,7 @@
 #include "DistrictManager.h"
 #include "GlobalInject.h"
 #include "CanHub.h"
+#include "HubWatch.h"
 #include "StatusLed.h"
 #include "Cli.h"
 
@@ -21,17 +22,19 @@ void setup() {
     routerInit();      // 8 DCC out via GPIO Matrix
     injInit();         // MCP23017 + interruption
     dmInit();
+    watchInit();      // suivi des modules du bus
     canInit();
     ledInit();
     canStartTasks();
-    cliInit();
+    Cli_begin();
 
-    Serial.println("Hub prêt. Commandes : districts [json] | hub | cut N | on N | inject on|off | reset");
+    Serial.println("Hub prêt. Commandes : districts [json] | hub | watch [json] | cut N | on N | inject on|off | reset");
 }
 
 void loop() {
     injPoll();
     dmTick();
     ledTick();
+    Cli_task();
     vTaskDelay(pdMS_TO_TICKS(2));
 }
