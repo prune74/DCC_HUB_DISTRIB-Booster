@@ -1,4 +1,4 @@
-// CanHub.h — TWAI : écoute des télémétries 0x102 + télémétrie du hub
+// CanHub.h — CAN via CanUniversal : télémétrie 0x102 + écoute du bus
 #pragma once
 
 void canInit();

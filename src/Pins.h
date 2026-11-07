@@ -6,8 +6,8 @@
 #define HUB_I2C_SDA           21
 #define HUB_I2C_SCL           22
 #define HUB_MCP_INT_PIN       34   // INT du MCP23017 (open-drain, pull-up 10 kΩ)
-#define HUB_CAN_TX_PIN        5
-#define HUB_CAN_RX_PIN        4
+#define HUB_CAN_TX            GPIO_NUM_5   // TWAI interne via CanUniversal
+#define HUB_CAN_RX            GPIO_NUM_4   // (convention DCC_CAN_RMT-Booster : TX=5, RX=4)
 #define HUB_WS2812_PIN        26   // 1 + HUB_NB_DISTRICTS LED
 
 #define MCP_ADDR_INJ          0x20  // MCP23017 : 8 entrées injections (GPA0-7)

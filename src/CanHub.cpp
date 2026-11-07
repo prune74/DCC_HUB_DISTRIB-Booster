@@ -1,32 +1,35 @@
-// CanHub.cpp — même protocole que DCC_CAN_RMT-Booster, bus commun aux 2 hubs
+// CanHub.cpp — bibliothèque prune74/CanUniversal (même structure que DCC_CAN_RMT-Booster)
 #include "CanHub.h"
+#include "HubCanConfig.h"
 #include "Config.h"
-#include "Pins.h"
 #include "DistrictManager.h"
-#include "driver/twai.h"
+#include <CanUniversal.h>
 
 // 0x102 : { ID, TYPE, mA/10, mV/100, état } — le hub ne mesure ni courant ni
 // tension (mA=0, mV=0) : seuls ID/TYPE/état sont significatifs.
 // Les deux hubs émettent avec TYPE=5 (lettre 'H') : ID_H_01 (EXT1) et ID_H_02 (EXT2).
+
+static HubCanConfig canConfig;
+
 void canInit() {
-    twai_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(HUB_CAN_TX_PIN, HUB_CAN_RX_PIN, TWAI_MODE_NORMAL);
-    g.rx_queue_len = 32;
-    twai_timing_config_t t = TWAI_TIMING_CONFIG_500KBITS();
-    twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
-    twai_driver_install(&g, &t, &f);
-    twai_start();
+    // begin() est tolérante : un bus en erreur reste accessible (invalide),
+    // sans jamais faire crasher l'application.
+    CanInit::begin(canConfig);
+    if (!CanBus::bus(0).isValid())
+        Serial.println("[CAN] bus invalide — vérifiez le câblage !");
 }
 
 static void canRxTask(void*) {
-    twai_message_t msg;
+    CanMsg rx;
     for (;;) {
-        if (twai_receive(&msg, pdMS_TO_TICKS(100)) == ESP_OK) {
-            if (msg.identifier == CAN_TELEMETRY_ID && msg.data_length_code >= 5) {
-                // uint8_t id = msg.data[0], type = msg.data[1], etat = msg.data[4];
+        if (CanBus::bus(0).receive(rx)) {
+            if (rx.id == CAN_TELEMETRY_ID && rx.dlc >= 5) {
+                // uint8_t id = rx.data[0], type = rx.data[1], etat = rx.data[4];
                 // TODO : suivi BoosterWatch-style des ID_B_xx pour croiser
                 // injections TOR et états CAN (diagnostic, journalisation).
             }
         }
+        vTaskDelay(pdMS_TO_TICKS(2));
     }
 }
 
@@ -38,15 +41,11 @@ static void canTxTask(void*) {
             if (s == DS_COUPE || s == DS_COUPE_MANUEL || s == DS_ATTENTE_RETRY) off++;
             if (s == DS_VERROUILLE || s == DS_INJECTION_GLOBALE) locked++;
         }
-        twai_message_t m = {};
-        m.identifier = CAN_TELEMETRY_ID;
-        m.data_length_code = 5;
-        m.data[0] = HUB_CAN_ID;
-        m.data[1] = HUB_CAN_TYPE;
-        m.data[2] = 0;  // mA/10
-        m.data[3] = 0;  // mV/100
-        m.data[4] = locked ? 1 : (off ? 3 : 0);  // 1=FAULT, 3=OFF, 0=OK
-        twai_transmit(&m, pdMS_TO_TICKS(10));
+        CanMsg m((uint16_t)CAN_TELEMETRY_ID,
+                 { HUB_CAN_ID, HUB_CAN_TYPE,
+                   (uint8_t)0, (uint8_t)0,                       // mA/10, mV/100
+                   (uint8_t)(locked ? 1 : (off ? 3 : 0)) });     // 1=FAULT, 3=OFF, 0=OK
+        CanBus::bus(0).send(m);
         vTaskDelay(pdMS_TO_TICKS(TELEMETRY_PERIOD_MS));
     }
 }
