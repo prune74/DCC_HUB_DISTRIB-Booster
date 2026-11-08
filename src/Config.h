@@ -31,8 +31,9 @@
                                      // — à réserver côté firmware convertisseur (nomenclature ID_X_nn)
 #define TELEMETRY_PERIOD_MS   1000
 
-// WS2812
+// WS2812 (Ws2812Universal)
 #define WS2812_BRIGHTNESS     40
+#define HUB_WS2812_RMT_CHANNEL  RMT_CHANNEL_7   // hub sans RMT DCC, mais explicite par sécurité
 
 // Numéro CAN du hub dans son type (= HUB_INSTANCE)
 #define HUB_CAN_ID            HUB_INSTANCE

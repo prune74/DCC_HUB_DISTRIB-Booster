@@ -186,7 +186,7 @@ DCC_HUB_DISTRIB-Booster/
 │   ├── StatusLed.h/.cpp           WS2812 : 1 LED générale + 8 districts
 │   ├── Cli.h/.cpp                 commandes série
 │   └── main.cpp                   setup + boucle
-├── platformio.ini          espressif32@6.9.0, lib_deps : CanUniversal + NeoPixel
+├── platformio.ini          espressif32@6.9.0, lib_deps : CanUniversal + Ws2812Universal
 ├── README.md               présentation, câblage, protocole CAN, commandes série
 └── LICENSE.txt              MIT
 ```
@@ -205,9 +205,9 @@ DCC_HUB_DISTRIB-Booster/
 | `StatusLed.h/.cpp`                          | `StatusLed.h/.cpp`              | ✅ mêmes conventions couleurs, LED 0 générale + 1 LED/district                |
 | `Cli.h/.cpp`                                | `Cli.h/.cpp`                    | ✅ commandes série, + `districts`/`cut`/`on`/`hub` spécifiques                |
 | `main.cpp`                                  | `main.cpp`                      | ✅ setup + boucle, tâches épinglées par cœur                                  |
-| — (fonctionnalité du convertisseur)         | `DistrictManager.h/.cpp`        | ➕ nouveau : machine à états des 8 districts                                  |
-| —                                           | `InjectionInput.h/.cpp`         | ➕ nouveau : 8 injections TOR sur GPIO directs                                |
-| —                                           | `GlobalInject.h/.cpp`           | ➕ nouveau : DAC → broche intensité LaBox                                     |
+| — (fonctionnalité du convertisseur)         | `DistrictManager.h/.cpp`        | ✅ machine à états des 8 districts                                            |
+| —                                           | `InjectionInput.h/.cpp`         | ✅ 8 injections TOR sur GPIO directs                                          |
+| —                                           | `GlobalInject.h/.cpp`           | ✅ DAC → broche intensité LaBox                                               |
 | `README.md`                                 | `README.md`                     | ✅ rédigé (canvas README), même plan et même style                            |
 | `.vscode/`, `platformio.ini`, `LICENSE.txt` | idem                            | ✅ à copier du projet convertisseur en adaptant `lib_deps`                    |
 
@@ -243,14 +243,14 @@ DCC_HUB_DISTRIB-Booster/
 ### Côté hub — réglages de coordination
 
 
-| Paramètre | Valeur | Coordination |
-| --- | --- | --- |
-| `INJECT_CONFIRM_MS` | 20 ms | « anti-rebond : bien inférieur au maintien d'injection du convertisseur. |
-| `INJECT_RELEASE_MS` | 50 ms | le convertisseur met &gt; 500 ms à relâcher (failsafe) : le hub attend un front bas **stable** avant le retry. |
-| `RETRY_DELAY1/2_MS` | 5 s / 10 s | espacés du backoff LaBox (40 ms → 10 s) : deux retries hub avant que le niveau 3 ne soit envisagé. |
-| `LOCK_TO_GLOBAL_MS` | 30 s | le repli global n'arrive qu'en dernier recours, après 2 essais + délai. |
-| `DAC_INJECT_VALUE` | 235 (\~3,04 V) | à recalculer si le facteur de shunt LaBox change (0,80). |
-| Démarrage | districts actifs dès `routerInit()` | si DCC absent au boot : silence en entrée = silence en sortie ; tout s'établit dès l'arrivée du DCC. |
+| Paramètre           | Valeur                              | Coordination                                                                                                   |
+| ------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `INJECT_CONFIRM_MS` | 20 ms                               | « anti-rebond : bien inférieur au maintien d'injection du convertisseur.                                       |
+| `INJECT_RELEASE_MS` | 50 ms                               | le convertisseur met &gt; 500 ms à relâcher (failsafe) : le hub attend un front bas **stable** avant le retry. |
+| `RETRY_DELAY1/2_MS` | 5 s / 10 s                          | espacés du backoff LaBox (40 ms → 10 s) : deux retries hub avant que le niveau 3 ne soit envisagé.             |
+| `LOCK_TO_GLOBAL_MS` | 30 s                                | le repli global n'arrive qu'en dernier recours, après 2 essais + délai.                                        |
+| `DAC_INJECT_VALUE`  | 235 (\~3,04 V)                      | à recalculer si le facteur de shunt LaBox change (0,80).                                                       |
+| Démarrage           | districts actifs dès `routerInit()` | si DCC absent au boot : silence en entrée = silence en sortie ; tout s'établit dès l'arrivée du DCC.           |
 
 
 ### Ordre de mise sous tension (recommandé)

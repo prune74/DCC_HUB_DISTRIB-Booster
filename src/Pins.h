@@ -17,7 +17,7 @@
 // --- Injection globale (repli niveau 3 -> broche intensité EXT de LaBox)
 #define HUB_DAC_INJECT_PIN    GPIO_NUM_25  // GPIO35 = EXT1 (hub A) / GPIO39 = EXT2 (hub B)
 
-// --- Injections TOR des convertisseurs : 8 entrées directes.
+// --- Injections TOR des convertisseurs : 8 entrées directes (sans MCP23017).
 //     Lignes toujours pilotées par le DAC du convertisseur (0 V ou ~3,04 V via
 //     résistance série 4,7-10 kΩ) : aucun pull-up nécessaire — c'est pour cela
 //     que les entrées "input only" (34, 35, 36, 39) conviennent ici.
@@ -28,7 +28,7 @@
 
 // --- CAN (TWAI interne via CanUniversal)
 #define HUB_CAN_TX            GPIO_NUM_5   // convention DCC_CAN_RMT-Booster : TX=5
-#define HUB_CAN_RX            GPIO_NUM_4   // RX=4
+#define HUB_CAN_RX            GPIO_NUM_4   //                                        RX=4
 
 // --- LED d'état
 #define HUB_WS2812_PIN        GPIO_NUM_26  // 1 + HUB_NB_DISTRICTS LED
