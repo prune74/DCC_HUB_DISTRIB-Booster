@@ -18,6 +18,8 @@
 #define RETRY_DELAY1_MS       5000
 #define RETRY_DELAY2_MS       10000
 #define LOCK_TO_GLOBAL_MS     30000  // verrouillé -> injection LaBox
+#define COUPE_TIMEOUT_MS      10000  // filet de sécurité : injection jamais
+                                     // relâchée -> forcer le retry quand même
 
 // DAC -> LaBox (seuil LaBox 2500 mA / 0,80 = 2,52 V)
 #define DAC_INJECT_VALUE      235    // ~3,04 V, ne jamais dépasser 3,3 V
