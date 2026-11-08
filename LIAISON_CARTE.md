@@ -16,7 +16,7 @@ flowchart LR
     HA & HB <--> BUS
 ```
 
-**Une seule modification de câblage par rapport au montage convertisseur-seul :** la ligne d'injection DAC (GPIO25 du convertisseur) ne va plus à la broche intensité de la LaBox — elle va au MCP23017 du hub du district. Le firmware du convertisseur reste inchangé.
+**Une seule modification de câblage par rapport au montage convertisseur-seul :** la ligne d'injection DAC (GPIO25 du convertisseur) ne va plus à la broche intensité de la LaBox — elle va sur un GPIO d'entrée du hub du district. Le firmware du convertisseur reste inchangé.
 
 
 | Hub   | Sortie LaBox | Injection DAC →         | Districts | Nom ID\_X\_nn                    |
@@ -54,7 +54,12 @@ Seule différence entre les deux cartes : la config (`Config.h`) — même firmw
 
 Le type 4 reste libre. Chaque type garde son espace de 254 numéros — un octet par trame de télémétrie (\~0,2 % de charge bus).
 
-**Réservation requise côté convertisseur** : `BoosterWatch` doit reconnaître TYPE=5 (lettre `H`) pour que `boosters` affiche les hubs comme les `ID_B_xx` :
+**Réservations et corrections requises côté convertisseur** (vérifiées dans `BoosterWatch.cpp` du DCC\_CAN\_RMT-Booster) :
+
+1. **`BoosterWatch_name()`** : ajouter la lettre `H` pour TYPE=5 — sinon affichage `ID_?_01` ;
+2. **`BoosterWatch_dump()/dumpJson()`** : énumérer aussi le TYPE=5 pour que `boosters` (ou une future commande `modules`) affiche `ID_H_01`/`ID_H_02` ;
+3. **⚠️ failsafe → relâcher l'injection** : à corriger dans le failsafe (DCC perdu &gt; 500 ms), `BoosterWatch` doit relâcher l'injection DAC et remettre les compteurs à zéro. Sinon, après une coupure du hub, le booster aval ne renvoie plus de trames OK et `okCount` n'atteint jamais `DCCB_INJECT_RELEASE_FRAMES` → l'injection n'est **jamais** relâchée et le district reste bloqué en `DS_COUPE` côté hub ;
+4. **conserver l'ignorance du TYPE=5 côté injection** : `BoosterWatch_onTelemetry()` ne traite que `type == BOOSTER` — la télémétrie ID\_H\_xx ne peut donc pas déclencher l'injection du convertisseur (aucune boucle parasite). Comportement à conserver tel quel.
 
 ```
 > boosters
@@ -80,16 +85,17 @@ Le convertisseur garde son rôle de **confirmation** (3 trames FAULT consécutiv
 ## Timings coordonnés
 
 
-| Paramètre              | Valeur         | Chez qui      | Coordination                                                                                  |
-| ---------------------- | -------------- | ------------- | --------------------------------------------------------------------------------------------- |
-| Failsafe DCC           | 500 ms         | convertisseur | le hub coupe le DCC du district ; c'est ce délai qui fait relâcher l'injection                |
-| Confirmation défaut    | 3 trames FAULT | convertisseur | \~3 s : le hub ne voit l'injection qu'après, le niveau 1 a déjà eu le temps d'agir            |
-| `INJECT_CONFIRM_MS`    | 20 ms          | hub           | anti-rebond, « au maintien d'injection du convertisseur                                       |
-| `INJECT_RELEASE_MS`    | 50 ms          | hub           | le convertisseur met &gt; 500 ms à relâcher : le hub attend un front bas stable               |
-| `RETRY_DELAY1/2_MS`    | 5 s / 10 s     | hub           | deux essais avant verrouillage                                                                |
-| `LOCK_TO_GLOBAL_MS`    | 30 s           | hub           | le niveau 3 n'arrive qu'en dernier recours                                                    |
-| Backoff rétablissement | 40 ms → 10 s   | LaBox         | le hub relâche son injection quand tout revient OK : les deux mécanismes se réarment ensemble |
-| `DAC_INJECT_VALUE`     | 235 (\~3,04 V) | hub           | seuil LaBox = 2500 mA ÷ 0,80 = 2,52 V ; recalculer si le facteur de shunt LaBox change        |
+| Paramètre | Valeur | Chez qui | Coordination |
+| --- | --- | --- | --- |
+| Failsafe DCC | 500 ms | convertisseur | le hub coupe le DCC du district ; c'est ce délai qui fait relâcher l'injection |
+| Confirmation défaut | 3 trames FAULT | convertisseur | \~3 s : le hub ne voit l'injection qu'après, le niveau 1 a déjà eu le temps d'agir |
+| `INJECT_CONFIRM_MS` | 20 ms | hub | anti-rebond : bien inférieur au maintien d'injection du convertisseur |
+| `INJECT_RELEASE_MS` | 50 ms | hub | le convertisseur met &gt; 500 ms à relâcher : le hub attend un front bas stable |
+| **Timeout `DS_COUPE`** | \~10 s (à ajouter) | hub | filet de sécurité : si l'injection persiste malgré le failsafe, forcer le passage en retry plutôt que de rester bloqué |
+| `RETRY_DELAY1/2_MS`| 5 s / 10 s | hub | deux essais avant verrouillage |
+| `LOCK_TO_GLOBAL_MS` | 30 s | hub | le niveau 3 n'arrive qu'en dernier recours |
+| Backoff rétablissement | 40 ms → 10 s | LaBox | le hub relâche son injection quand tout revient OK : les deux mécanismes se réarment ensemble |
+| `DAC_INJECT_VALUE` | 235 (\~3,04 V) | hub | seuil LaBox = 2500 mA ÷ 0,80 = 2,52 V ; recalculer si le facteur de shunt LaBox change |
 
 
 ## Configuration LaBox — `config.Labox.h`
@@ -108,14 +114,14 @@ Le convertisseur garde son rôle de **confirmation** (3 trames FAULT consécutiv
 ## Signaux entre cartes
 
 
-| Signal            | De → Vers                                     | Format                           | Remarques                                            |
-| ----------------- | --------------------------------------------- | -------------------------------- | ---------------------------------------------------- |
-| DCC               | LaBox EXT → hub GPIO27                        | 0–3,3 V via XOR SN74LVC1G86      | masse commune obligatoire                            |
-| DCC (copies)      | hub → convertisseurs                          | 0–3,3 V, fronts d'origine        | même format que EXT, vers les XOR des convertisseurs |
-| Injection TOR     | convertisseur GPIO25 → hub MCP23017           | \~3,04 V = défaut, via 4,7–10 kΩ | ne va **plus** à la LaBox                            |
-| Injection repli   | hub GPIO25 (DAC) → broche intensité EXT LaBox | \~3,04 V via 4,7–10 kΩ           | jamais &gt; 3,3 V                                    |
-| Télémétries       | toutes cartes → bus CAN                       | 0x102 DLC 5                      | ID + TYPE + état                                     |
-| Bits DCC / cutout | convertisseur → boosters                      | 0x100 / 0x101                    | inchangé, hors périmètre hub                         |
+| Signal | De → Vers | Format | Remarques |
+| --- | --- | --- | --- |
+| DCC | LaBox EXT → hub GPIO27 | 0–3,3 V via XOR SN74LVC1G86 | masse commune obligatoire |
+| DCC (copies) | hub → convertisseurs | 0–3,3 V, fronts d'origine | même format que EXT, vers les XOR des convertisseurs |
+| Injection TOR | convertisseur GPIO25 → hub GPIO 21/22/23/33/34/35/36/39 | \~3,04 V = défaut, via 4,7–10 kΩ | ne va **plus** à la LaBox |
+| Injection repli | hub GPIO25 (DAC) → broche intensité EXT LaBox | \~3,04 V via 4,7–10 kΩ | jamais &gt; 3,3 V |
+| Télémétries | toutes cartes → bus CAN | 0x102 DLC 5 | ID + TYPE + état |
+| Bits DCC / cutout | convertisseur → boosters | 0x100 / 0x101 | inchangé, hors périmètre hub |
 
 
 ## Ordre de mise sous tension (recommandé)
@@ -136,5 +142,5 @@ Le convertisseur garde son rôle de **confirmation** (3 trames FAULT consécutiv
 ## Cahier des charges de compatibilité (résumé)
 
 **LaBox** : shield à 2 boosters, phase EXT1/EXT2 vérifiée, facteur 0,80 stable.  
-**Convertisseur** : TYPE=5 réservé dans `BoosterWatch`, injection recâblée vers le hub, failsafe 500 ms et confirmation 3 trames inchangés.  
-**Hub** : GPIO Matrix actif, MCP23017 sur interruption, timings du tableau ci-dessus, télémétrie ID\_H\_xx DLC 5, `HubWatch` tolérant DLC 4 (anciens boosters).
+**Convertisseur** : TYPE=5 réservé dans `BoosterWatch` (nom + dump), injection recâblée vers le hub, failsafe 500 ms et confirmation 3 trames inchangés, **et failsafe qui relâche l'injection** (sinon district bloqué côté hub).  
+**Hub** : GPIO Matrix actif, injections TOR sur GPIO directs (anti-rebond 20 ms), timings du tableau ci-dessus, télémétrie ID\_H\_xx DLC 5, `HubWatch` tolérant DLC 4 (anciens boosters).

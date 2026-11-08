@@ -1,6 +1,6 @@
 // HubWatch.cpp — même logique que BoosterWatch du convertisseur :
 // un module suivi individuellement (nom ID_X_nn, état, dernière vue),
-// indépendant des injections TOR du MCP23017 (croisement au diagnostic).
+// indépendant des injections TOR lues sur GPIO (croisement au diagnostic).
 #include "HubWatch.h"
 #include "Config.h"
 

@@ -1,7 +1,7 @@
 // Pins.h — brochage du hub de distribution (8 districts)
 // Toutes les broches sont de type gpio_num_t (GPIO_NUM_x), cohérent avec
 // CanUniversal et les API driver/gpio. Les API Arduino (pinMode, digitalWrite,
-// dacWrite, Wire.begin…) acceptent ces valeurs directement.
+// dacWrite, pinMode…) acceptent ces valeurs directement.
 #pragma once
 
 #include "driver/gpio.h"
@@ -17,15 +17,18 @@
 // --- Injection globale (repli niveau 3 -> broche intensité EXT de LaBox)
 #define HUB_DAC_INJECT_PIN    GPIO_NUM_25  // GPIO35 = EXT1 (hub A) / GPIO39 = EXT2 (hub B)
 
-// --- I2C (MCP23017 : injections TOR des convertisseurs)
-#define HUB_I2C_SDA           GPIO_NUM_21
-#define HUB_I2C_SCL           GPIO_NUM_22
-#define HUB_MCP_INT_PIN       GPIO_NUM_34  // INT du MCP23017 (open-drain, pull-up 10 kΩ)
-#define MCP_ADDR_INJ          0x20         // 8 entrées injections (GPA0-7)
+// --- Injections TOR des convertisseurs : 8 entrées directes.
+//     Lignes toujours pilotées par le DAC du convertisseur (0 V ou ~3,04 V via
+//     résistance série 4,7-10 kΩ) : aucun pull-up nécessaire — c'est pour cela
+//     que les entrées "input only" (34, 35, 36, 39) conviennent ici.
+//     Au boot, tous les convertisseurs sortent 0 V -> lignes LOW, aucun faux défaut.
+#define HUB_INJ_PINS         { GPIO_NUM_21, GPIO_NUM_22, GPIO_NUM_23, \
+                               GPIO_NUM_33, GPIO_NUM_34, GPIO_NUM_35, \
+                               GPIO_NUM_36, GPIO_NUM_39 }
 
 // --- CAN (TWAI interne via CanUniversal)
 #define HUB_CAN_TX            GPIO_NUM_5   // convention DCC_CAN_RMT-Booster : TX=5
-#define HUB_CAN_RX            GPIO_NUM_4   //                                        RX=4
+#define HUB_CAN_RX            GPIO_NUM_4   // RX=4
 
 // --- LED d'état
 #define HUB_WS2812_PIN        GPIO_NUM_26  // 1 + HUB_NB_DISTRICTS LED

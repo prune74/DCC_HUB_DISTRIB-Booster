@@ -1,6 +1,5 @@
 // main.cpp — hub de distribution DCC, 8 districts par carte (CFC)
 #include <Arduino.h>
-#include <Wire.h>
 #include "Config.h"
 #include "Pins.h"
 #include "DistrictRouter.h"
@@ -17,10 +16,9 @@ void setup() {
     Serial.printf("\nHub DCC_CAN v%s — hub %c, %u districts\n",
                   HUB_VERSION, 'A' + HUB_INSTANCE, HUB_NB_DISTRICTS);
 
-    Wire.begin(HUB_I2C_SDA, HUB_I2C_SCL, 400000);
     globalInjectInit();
     routerInit();      // 8 DCC out via GPIO Matrix
-    injInit();         // MCP23017 + interruption
+    injInit();         // 8 entrées TOR directes (convertisseurs)
     dmInit();
     watchInit();      // suivi des modules du bus
     canInit();
