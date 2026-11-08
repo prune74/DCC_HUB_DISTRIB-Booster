@@ -41,13 +41,13 @@ LaBox (CommandStation-EX)                 ESP32 hub                        Bus C
 ┌─────────────────────┐   EXT1/EXT2    ┌────────────────────────────┐
 │  Sortie booster     │  0–3.3 V  ──►  │ XOR SN74LVC1G86 → GPIO 27  │
 │  DCC + cutout       │                │        │                   │
-│                     │                │   GPIO Matrix (matériel)   │
-└─────────────────────┘                │   8 broches coupables ──►──┼──►  vers les 8
-                                       │                            │     convertisseurs
-┌─────────────────────┐   injection    │ MCP23017 ← 8 lignes TOR ◄──┼──◄  (DAC GPIO25
-│  Convertisseurs     │  ◄──────────►  │ INT → GPIO 34 (I2C 21/22)  │     des cartes)
-└─────────────────────┘                │ TWAI : TX=5, RX=4          │ ──► 500 kbit/s
-                                       │ DAC GPIO 25 ──► LaBox EXT  │
+│                     │                │   GPIO Matrix (matériel)    │
+└─────────────────────┘                │   8 broches coupables ──►──┼──► vers les 8
+                                       │                            │    convertisseurs
+┌─────────────────────┐   injection    │ MCP23017 ← 8 lignes TOR ◄──┼──◄ (DAC GPIO25
+│  Convertisseurs     │   ◄──────────► │ INT → GPIO 34 (I2C 21/22)  │     des cartes)
+└─────────────────────┘                │ TWAI : TX=5, RX=4           │ ──► 500 kbit/s
+                                       │ DAC GPIO 25 ──► LaBox EXT   │
                                        └────────────────────────────┘
 ```
 
@@ -133,6 +133,8 @@ Flasher le hub A avec `HUB_INSTANCE 0`, le hub B avec `HUB_INSTANCE 1` — seule
 districts          état des 8 districts du hub
 districts json     idem JSON, pour journalisation/supervision PC
 hub                identité (A/B, EXT1/EXT2, ID_H_xx, version)
+watch              modules vus sur le bus (ID_H_xx, ID_C, ID_B_xx), état, dernière vue
+watch json         idem JSON, pour supervision PC
 cut N / on N       coupure / réactivation manuelle d'un district
 inject on|off      test manuel de l'injection DAC → LaBox (voltmètre sur GPIO 25)
 reset              redémarrage ESP32
