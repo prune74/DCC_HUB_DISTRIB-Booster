@@ -41,13 +41,13 @@ LaBox (CommandStation-EX)                 ESP32 hub                        Bus C
 ┌─────────────────────┐   EXT1/EXT2    ┌────────────────────────────┐
 │  Sortie booster     │  0–3.3 V  ──►  │ XOR SN74LVC1G86 → GPIO 27  │
 │  DCC + cutout       │                │        │                   │
-│                     │                │   GPIO Matrix (matériel)    │
+│                     │                │   GPIO Matrix (matériel)   │
 └─────────────────────┘                │   8 broches coupables ──►──┼──► vers les 8
                                        │                            │    convertisseurs
 ┌─────────────────────┐   injection    │ MCP23017 ← 8 lignes TOR ◄──┼──◄ (DAC GPIO25
-│  Convertisseurs     │   ◄──────────► │ INT → GPIO 34 (I2C 21/22)  │     des cartes)
-└─────────────────────┘                │ TWAI : TX=5, RX=4           │ ──► 500 kbit/s
-                                       │ DAC GPIO 25 ──► LaBox EXT   │
+│  Convertisseurs     │  ◄──────────►  │ INT → GPIO 34 (I2C 21/22)  │     des cartes)
+└─────────────────────┘                │ TWAI : TX=5, RX=4          │ ──► 500 kbit/s
+                                       │ DAC GPIO 25 ──► LaBox EXT  │
                                        └────────────────────────────┘
 ```
 
