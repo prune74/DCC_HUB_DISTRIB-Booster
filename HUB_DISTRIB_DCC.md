@@ -182,6 +182,7 @@ DCC_HUB_DISTRIB-Booster/
 │   ├── DistrictManager.h/.cpp     machine à états des 8 districts
 │   ├── GlobalInject.h/.cpp        DAC → broche intensité de l'EXT du hub
 │   ├── HubCanConfig.h             Provider CanUniversal (TWAI interne, TX=5/RX=4)
+│   ├── HubWs2812Config.h         Provider Ws2812Universal (GPIO 26, RMT_CHANNEL_7)
 │   ├── CanHub.h/.cpp              télémétrie 0x102 + écoute du bus (ID_B_xx)
 │   ├── StatusLed.h/.cpp           WS2812 : 1 LED générale + 8 districts
 │   ├── Cli.h/.cpp                 commandes série
@@ -199,6 +200,7 @@ DCC_HUB_DISTRIB-Booster/
 | `Pins.h`                                    | `Pins.h`                        | ✅ même rôle, mêmes conventions (XOR → GPIO27, TX=5/RX=4, WS2812 GPIO26)      |
 | `Config.h`                                  | `Config.h`                      | ✅ + `HUB_INSTANCE` (seule différence hub A / hub B)                          |
 | `BoosterCanConfig.h` (Provider CAN)         | `HubCanConfig.h`                | ✅ même découpe : Provider CanUniversal séparé                                |
+| —                                          | `HubWs2812Config.h`             | ✅ Provider Ws2812Universal séparé (comme `HubCanConfig.h`)                |
 | `CanBooster.h/.cpp`                         | `CanHub.h/.cpp`                 | ✅ télémétrie 0x102, DLC 5, états OK/FAULT/OFF                                |
 | `BoosterWatch.h/.cpp`                       | `HubWatch.h/.cpp`               | ✅ même logique : suivi nominatif ID\_X\_nn, état, dernière vue, streak FAULT |
 | `DccRmtDecoder.h/.cpp`                      | `DistrictRouter.h/.cpp`         | ✅ équivalent fonctionnel : RMT RX mesure ↔ GPIO Matrix recopie               |
