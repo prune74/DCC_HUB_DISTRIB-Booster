@@ -97,7 +97,7 @@ LED 0 (générale) puis 1 LED par district, tout visible simultanément :
 
 Gradation via `WS2812_BRIGHTNESS` dans `Config.h`. Mêmes conventions visuelles que DCC_CAN_RMT-Booster.
 
-Pilotage par **Ws2812Universal** (bibliothèque maison) : configuration via Provider (`HubLedConfig`), canal RMT explicite (`HUB_WS2812_RMT_CHANNEL`, défaut `RMT_CHANNEL_7`), `show()` non bloquant — aucune interruption coupée, la distribution DCC n'est jamais perturbée. LED absente ou mal câblée = bus invalide, sans crash.
+Pilotage par **Ws2812Universal** (bibliothèque maison) : configuration via Provider (`HubWs2812Config`, voir `src/HubWs2812Config.h`), canal RMT explicite (`HUB_WS2812_RMT_CHANNEL`, défaut `RMT_CHANNEL_7`), `show()` non bloquant — aucune interruption coupée, la distribution DCC n'est jamais perturbée. LED absente ou mal câblée = bus invalide, sans crash.
 
 ## Failsafe
 

@@ -1,5 +1,6 @@
 // StatusLed.cpp — codes couleurs cohérents avec DCC_CAN_RMT-Booster
 #include "StatusLed.h"
+#include "HubWs2812Config.h"
 #include "Config.h"
 #include "Pins.h"
 #include "DistrictManager.h"
@@ -7,25 +8,10 @@
 #include "InjectionInput.h"
 #include <Ws2812Universal.h>
 
-// --- Configuration matérielle via Provider (pattern CanUniversal) ---
-class HubLedConfig : public Ws2812ConfigProvider {
-public:
-    uint8_t busCount() const override { return 1; }
-    const Ws2812BusConfig &busConfig(uint8_t) const override {
-        static const Ws2812BusConfig cfg(
-            true,                                  // enabled
-            HUB_WS2812_PIN,                        // GPIO 26
-            1 + HUB_NB_DISTRICTS,                  // 9 LED : générale + 8 districts
-            HUB_WS2812_RMT_CHANNEL,                // cohabitation RMT
-            WS2812_BRIGHTNESS);
-        return cfg;
-    }
-};
-
 static Ws2812Bus &strip() { return Ws2812Bus::bus(0); }
 
 void ledInit() {
-    HubLedConfig config;
+    HubWs2812Config config;
     Ws2812Init::begin(config);          // tolérant : bus invalide plutôt que crash
     strip().clear();
     strip().show();                     // LED éteintes au boot
